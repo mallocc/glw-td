@@ -9,8 +9,7 @@
 #include "StringFormat.h"
 
 #include "GGUI.h"
-
-#include <pthread.h>
+#include "TD.h"
 
 using util::StringFormat;
 
@@ -22,6 +21,7 @@ using glw::engine::GContent;
 using glw::engine::glsl::GShaderProgram;
 using glw::engine::glsl::GShaderProgramId;
 using glw::engine::glsl::GShaderProgramManager;
+using glw::engine::glsl::GShaderHandle_T;
 
 using glw::engine::buffers::GVertexBufferObject;
 using glw::engine::buffers::GPrimativeFactory;
@@ -42,6 +42,20 @@ using glw::gui::GProgressBar;
 using glw::gui::GCheckBox;
 using glw::gui::GDialog;
 using glw::gui::GPane;
+using glw::gui::GClickable;
+using glw::gui::GContextShaderHandle_T;
+using glw::meta::GLinker;
+
+using TD::Credit;
+using TD::Life;
+using TD::Tick;
+using TD::Game;
+using TD::Grid;
+using TD::Map;
+using TD::Tower;
+using TD::Path;
+using TD::Mob;
+using TD::Wave;
 
 
 namespace
@@ -64,11 +78,156 @@ namespace
 
   GLabel * fpsLabel;
 
-  GProgressBar * progressbar;
-
   GPane * pane;
 }
 
+
+#define NULL_SELECTED_INDEX -1
+
+struct TableCell
+{
+  int x, y;
+};
+
+class GridComponent : public GClickable
+{
+public:
+
+  enum CellType
+  {
+    CT_EMPTY,
+    CT_TURRET
+  };
+
+  GridComponent()
+    : m_grid(NULL),
+      m_selectedCell({NULL_SELECTED_INDEX, NULL_SELECTED_INDEX}),
+      m_uniqueImages()
+  {
+    initImageGrid(DEFAULT_GRIDSIZE, DEFAULT_GRIDSIZE);
+  }
+
+  GridComponent(glm::vec2 pos, glm::vec2 size, Grid* grid)
+    : GClickable(pos, size),
+      m_grid (grid),
+      m_selectedCell({NULL_SELECTED_INDEX, NULL_SELECTED_INDEX}),
+      m_uniqueImages()
+  {
+    if (NULL != grid)
+    {
+      initImageGrid(grid->getWidth(), grid->getHeight());
+    }
+  }
+
+  virtual void draw(glm::mat4 parentMatrix, glw::engine::glsl::GShaderHandle_T shaderHandle, glw::gui::GContextShaderHandle_T contextHandle)
+  {
+
+  }
+
+  virtual bool checkKeyEvents(int key, int action)
+  {
+
+  }
+
+  virtual bool checkMouseEvents(int button, int action)
+  {
+    bool eventHasHappened = false;
+
+    eventHasHappened |= GClickable::checkMouseEvents(button, action);
+
+    onPressed();
+
+    return eventHasHappened;
+  }
+
+  virtual void init(glw::gui::GContext *context, IGComponent *parent)
+  {
+    setContext(context);
+    setParent(parent);
+    setId("gridcomponent");
+    inheritColorStyle();
+
+    loadImages();
+  }
+
+  virtual void validate()
+  {
+
+  }
+
+  virtual void update()
+  {
+
+  }
+
+  void onPressed()
+  {
+    if (NULL != m_grid)
+    {
+      if (this->isReleased())
+      {
+        glm::vec2 pos = this->getRelativeMousePos();
+
+        float cellWidth = this->getSize().x / m_grid->getWidth();
+        float cellHeight = this->getSize().y / m_grid->getHeight();
+
+        int x = pos.x / cellWidth;
+        int y = pos.y / cellHeight;
+
+        m_selectedCell = {x, y};
+      }
+    }
+  }
+
+
+  triggers:
+
+
+private:
+  Grid* m_grid;
+
+  TableCell m_selectedCell;
+
+  std::map<CellType, GImageView> m_uniqueImages;
+
+  typedef CellType* CellRow;
+  typedef CellRow* CellGrid;
+  CellGrid m_cellGrid;
+
+  void initImageGrid(int width, int height)
+  {
+    m_cellGrid = new CellRow[width];
+    for (int i = 0; i < width; ++i)
+    {
+      m_cellGrid[i] = new CellType[height];
+    }
+
+    for (int i = 0; i < width; ++i)
+    {
+      for (int j = 0; j < height; ++j)
+      {
+        m_cellGrid[i][j] = CT_EMPTY;
+      }
+    }
+  }
+
+  void loadImages()
+  {
+    if (NULL != m_grid)
+    {
+      float cellWidth = this->getSize().x / m_grid->getWidth();
+      float cellHeight = this->getSize().y / m_grid->getHeight();
+      m_uniqueImages[CT_EMPTY] = GImageView(glm::vec2(),
+                                            glm::vec2(cellWidth,
+                                                      cellHeight),
+                                            "textures/empty.png");
+      m_uniqueImages[CT_TURRET] = GImageView(glm::vec2(),
+                                            glm::vec2(cellWidth,
+                                                      cellHeight),
+                                            "textures/turret.png");
+    }
+  }
+};
 
 
 void handleInput()
@@ -82,15 +241,6 @@ void handleInput()
     camera.applyForceForward(content->getMouse()->popScrollDelta().y);
   }
 
-  if (content->getKeyboard()->isKeyDown(GLFW_KEY_DOWN))
-  {
-    progressbar->setProgress(progressbar->getProgress() - 1);
-  }
-
-  if (content->getKeyboard()->isKeyDown(GLFW_KEY_UP))
-  {
-    progressbar->setProgress(progressbar->getProgress() + 1);
-  }
 }
 
 GReturnCode loop()
@@ -248,60 +398,12 @@ GReturnCode initVBOs()
   pane = new GPane(glm::vec2(), windowSize);
   context.addComponent(pane);
 
-  // Add a label
-  pane->addComponent(glw::gui::createLabel("fucking yeeeeeeeeeet",  windowSize / 2.0f, 100.0f, glm::vec4(1.0f,0.0,0.0f,0.5f), true));
-
-  // Add a label
+   // Add a label
   fpsLabel = glw::gui::createLabel("fps", glm::vec2(), 20, glw::BLACK_A);
   pane->addComponent(fpsLabel);
 
-  // Add a button with callbacks
-  GButton * button = new GButton(glm::vec2(100), glm::vec2(500, 100), "yeet me");
-  LINK(TRIGGER(button, &GButton::onPressed), ACTION(onButtonPress));
-  LINK(TRIGGER(button, &GButton::onToggledOn), ACTION(onToggledOn));
-  pane->addComponent(button);
-
-  // Add a window
-  pane->addComponent(new GWindow(glm::vec2(125,250), glm::vec2(300,300), "vindow"));
-
-  GWindow * window = new GWindow(glm::vec2(125,250), glm::vec2(300,300), "yoteth");
-  pane->addComponent(window);
-
-  // Add a text edit to the window
-  window->addChildComponent(new GTextEdit(glm::vec2(300), glm::vec2(100,100),"this is some text", 20, glw::WHITE_A));
-
-  // Add a slider to the window
-  window->addChildComponent(new GSlider(glm::vec2(150), glm::vec2(300,10), 0.25f, 0.5f));
-
-  // Add a slider to the window
-  window->addChildComponent(new GSlider(glm::vec2(150, 200), glm::vec2(25,200), 0.25f, 0.05f, true));
-
-  // Add a spinner to the window
-  window->addChildComponent(new GSpinner(glm::vec2(200), glm::vec2(100, 25)));
-
-  // Add a dropdown to the window
-  GDropdown<std::string> * dropdown = new GDropdown<std::string>(glm::vec2(400), glm::vec2(100, 25));
-  window->addChildComponent(dropdown);
-
-  // Add an image to the window
-  window->addChildComponent(new GImageView(glm::vec2(0, 300), glm::vec2(100), "../textures/151.bmp"));
-
-  // Add a progress bar the window
-  progressbar = new GProgressBar(glm::vec2(400, 500), glm::vec2(100, 20), 0,100, true);
-  window->addChildComponent(progressbar);
-
-  // Add a checkbox to the window
-  window->addChildComponent(new GCheckBox(glm::vec2(550, 400), glm::vec2(30)));
-
   // Initialise the context
   context.init();
-
-  // Add items to the dropdown
-  std::string str("");
-  dropdown->add(str, "one");
-  dropdown->add(str, "two");
-  dropdown->add(str, "three");
-  dropdown->setSelectedId(2);
 
   // Validate the context
   context.validate();
@@ -323,19 +425,6 @@ GReturnCode init()
   }
 
   return success;
-}
-
-struct thread_args
-{
-  GContext * instance;
-  int button, action;
-};
-
-void * thread_helper(void *voidArgs)
-{
-  thread_args *args = (thread_args *) voidArgs;
-  args->instance->checkMouseEvents(args->button, args->action);
-  return new int(0);
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)

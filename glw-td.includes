@@ -13,3 +13,4 @@ build
 ../glw/src/main-examples
 ../glw/inc
 textures
+inc

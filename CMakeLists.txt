@@ -28,7 +28,6 @@ set(GLWSRC ${PROJECT_SOURCE_DIR}/../glw/src)
 
 # specifiy each source file to be compiled 
 set(GLWSRC_FILES
-#files
 ${GLWSRC}/GGUI.cpp
 ${GLWSRC}/ImageLoader.cpp
 ${GLWSRC}/GFrameBufferObject.cpp
@@ -51,6 +50,7 @@ set(SRC ${PROJECT_SOURCE_DIR}/src)
 # specifiy each source file to be compiled 
 set(SRC_FILES
 #files
+#${SRC}/TD.cpp
 ${SRC}/main.cpp
 )
 
