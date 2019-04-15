@@ -79,6 +79,8 @@ namespace
   GLabel * fpsLabel;
 
   GPane * pane;
+
+  Grid gameGrid;
 }
 
 
@@ -95,8 +97,9 @@ public:
 
   enum CellType
   {
+    CT_SELECTED,
     CT_EMPTY,
-    CT_TURRET
+    CT_TOWER
   };
 
   GridComponent()
@@ -121,12 +124,38 @@ public:
 
   virtual void draw(glm::mat4 parentMatrix, glw::engine::glsl::GShaderHandle_T shaderHandle, glw::gui::GContextShaderHandle_T contextHandle)
   {
-
+    if (NULL != m_grid)
+    {
+      for (int ix = 0; ix < m_grid->getWidth(); ++ix)
+      {
+        for (int iy = 0; iy < m_grid ->getHeight(); ++iy)
+        {
+          CellType ct = CT_EMPTY;
+          if (NULL != m_grid->getTower(ix,iy))
+          {
+            ct = CT_TOWER;
+          }
+          GImageView& image = m_uniqueImages[ct];
+          image.setPos(glm::vec2(image.getSize().x * ix,
+                                 image.getSize().y * iy));
+          image.validate();
+          image.draw(parentMatrix, shaderHandle, contextHandle);
+        }
+      }
+      if (m_grid->isWithin(m_selectedCell.x, m_selectedCell.y))
+      {
+        GImageView& image = m_uniqueImages[CT_SELECTED];
+        image.setPos(glm::vec2(image.getSize().x * m_selectedCell.x,
+                               image.getSize().y * m_selectedCell.y));
+        image.validate();
+        image.draw(parentMatrix, shaderHandle, contextHandle);
+      }
+    }
   }
 
   virtual bool checkKeyEvents(int key, int action)
   {
-
+    return false;
   }
 
   virtual bool checkMouseEvents(int button, int action)
@@ -148,6 +177,7 @@ public:
     inheritColorStyle();
 
     loadImages();
+    initImages(context, parent);
   }
 
   virtual void validate()
@@ -220,11 +250,27 @@ private:
       m_uniqueImages[CT_EMPTY] = GImageView(glm::vec2(),
                                             glm::vec2(cellWidth,
                                                       cellHeight),
-                                            "textures/empty.png");
-      m_uniqueImages[CT_TURRET] = GImageView(glm::vec2(),
+                                            "../textures/empty.png");
+      m_uniqueImages[CT_TOWER] = GImageView(glm::vec2(),
                                             glm::vec2(cellWidth,
                                                       cellHeight),
-                                            "textures/turret.png");
+                                            "../textures/tower.png");
+      m_uniqueImages[CT_SELECTED] = GImageView(glm::vec2(),
+                                            glm::vec2(cellWidth,
+                                                      cellHeight),
+                                            "../textures/selected.png");
+    }
+  }
+  void initImages(glw::gui::GContext *context, IGComponent *parent)
+  {
+    std::map<CellType, GImageView>::iterator itor = m_uniqueImages.begin();
+
+    while(itor != m_uniqueImages.end())
+    {
+      LINFO(TRG, "Creating unique image!", LINFO_ARGS);
+      itor->second.init(context, parent);
+
+      ++itor;
     }
   }
 };
@@ -398,9 +444,12 @@ GReturnCode initVBOs()
   pane = new GPane(glm::vec2(), windowSize);
   context.addComponent(pane);
 
-   // Add a label
+  // Add a label
   fpsLabel = glw::gui::createLabel("fps", glm::vec2(), 20, glw::BLACK_A);
   pane->addComponent(fpsLabel);
+
+  gameGrid = Grid();
+  pane->addComponent(new GridComponent(glm::vec2(), glm::vec2(500), &gameGrid));
 
   // Initialise the context
   context.init();
