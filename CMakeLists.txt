@@ -28,6 +28,7 @@ set(GLWSRC ${PROJECT_SOURCE_DIR}/../glw/src)
 
 # specifiy each source file to be compiled 
 set(GLWSRC_FILES
+${GLWSRC}/GTextureManager.cpp
 ${GLWSRC}/GGUI.cpp
 ${GLWSRC}/ImageLoader.cpp
 ${GLWSRC}/GFrameBufferObject.cpp

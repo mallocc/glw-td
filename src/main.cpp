@@ -44,6 +44,7 @@ using glw::gui::GDialog;
 using glw::gui::GPane;
 using glw::gui::GClickable;
 using glw::gui::GContextShaderHandle_T;
+using glw::gui::GComponent;
 using glw::meta::GLinker;
 
 using TD::Credit;
@@ -57,13 +58,15 @@ using TD::Path;
 using TD::Mob;
 using TD::Wave;
 
+class GridComponent;
+class ShopComponent;
 
 namespace
 {
-  const char * TRG = "MAIN";
-  const char * __CLASSNAME__ = "main";
+  const char* TRG = "MAIN";
+  const char* __CLASSNAME__ = "main";
 
-  GContent * content;
+  GContent* content;
   GShaderProgramManager shaderProgramManager;
   GShaderProgramId BASIC_PROGRAM;
   GShaderProgramId GUI_PROGRAM;
@@ -76,11 +79,15 @@ namespace
 
   GContext context;
 
-  GLabel * fpsLabel;
+  GLabel* fpsLabel;
 
-  GPane * pane;
+  GPane* pane;
 
-  Grid gameGrid;
+  Grid mapGrid;
+  Grid shopGrid;
+
+  GridComponent* map;
+  ShopComponent* shop;
 }
 
 
@@ -99,7 +106,8 @@ public:
   {
     CT_SELECTED,
     CT_EMPTY,
-    CT_TOWER
+    CT_TOWER,
+    CT_COUNT
   };
 
   GridComponent()
@@ -110,7 +118,7 @@ public:
     initImageGrid(DEFAULT_GRIDSIZE, DEFAULT_GRIDSIZE);
   }
 
-  GridComponent(glm::vec2 pos, glm::vec2 size, Grid* grid)
+  GridComponent(glm::vec2 pos, glm::vec2 size, Grid* grid = NULL)
     : GClickable(pos, size),
       m_grid (grid),
       m_selectedCell({NULL_SELECTED_INDEX, NULL_SELECTED_INDEX}),
@@ -139,7 +147,7 @@ public:
           image.setPos(glm::vec2(image.getSize().x * ix,
                                  image.getSize().y * iy));
           image.validate();
-          image.draw(parentMatrix, shaderHandle, contextHandle);
+          image.draw(parentMatrix * getRelativeModelMatrix(), shaderHandle, contextHandle);
         }
       }
       if (m_grid->isWithin(m_selectedCell.x, m_selectedCell.y))
@@ -148,7 +156,7 @@ public:
         image.setPos(glm::vec2(image.getSize().x * m_selectedCell.x,
                                image.getSize().y * m_selectedCell.y));
         image.validate();
-        image.draw(parentMatrix, shaderHandle, contextHandle);
+        image.draw(parentMatrix * getRelativeModelMatrix(), shaderHandle, contextHandle);
       }
     }
   }
@@ -178,6 +186,7 @@ public:
 
     loadImages();
     initImages(context, parent);
+
   }
 
   virtual void validate()
@@ -194,7 +203,7 @@ public:
   {
     if (NULL != m_grid)
     {
-      if (this->isReleased())
+      if (this->isPressed())
       {
         glm::vec2 pos = this->getRelativeMousePos();
 
@@ -210,12 +219,10 @@ public:
   }
 
 
-  triggers:
-
-
-private:
+protected:
   Grid* m_grid;
 
+private:
   TableCell m_selectedCell;
 
   std::map<CellType, GImageView> m_uniqueImages;
@@ -267,14 +274,51 @@ private:
 
     while(itor != m_uniqueImages.end())
     {
-      LINFO(TRG, "Creating unique image!", LINFO_ARGS);
       itor->second.init(context, parent);
-
       ++itor;
     }
   }
 };
 
+class ShopComponent : public GridComponent
+{
+public:
+  ShopComponent()
+  {}
+
+  ShopComponent(glm::vec2 pos, glm::vec2 size)
+    : GridComponent(pos, size, new Grid(GridComponent::CT_COUNT, 1))
+  {
+    m_grid->placeTower(0, 0, new Tower());
+  }
+
+  virtual void init(glw::gui::GContext *context, IGComponent *parent)
+  {
+    GridComponent::init(context, parent);
+  }
+  virtual void draw(glm::mat4 parentMatrix, glw::engine::glsl::GShaderHandle_T shaderHandle, glw::gui::GContextShaderHandle_T contextHandle)
+  {
+    GridComponent::draw(parentMatrix, shaderHandle, contextHandle);
+  }
+  virtual bool checkKeyEvents(int key, int action)
+  {
+    return GridComponent::checkKeyEvents(key, action);
+  }
+  virtual bool checkMouseEvents(int button, int action)
+  {
+    return GridComponent::checkMouseEvents(button, action);
+  }
+  virtual void validate()
+  {
+    GridComponent::validate();
+  }
+  virtual void update()
+  {
+    GridComponent::update();
+  }
+private:
+
+};
 
 void handleInput()
 {
@@ -336,7 +380,7 @@ GReturnCode initShaderPrograms()
 {
   GReturnCode success = GLW_SUCCESS;
 
-  LINFO(TRG, "Initialising GLSL shader programs...", __CLASSNAME__, __func__);
+  LINFO("Initialising GLSL shader programs...");
 
   // Add a new program to the manager
   if (GLW_SUCCESS == shaderProgramManager.addNewProgram(
@@ -356,8 +400,7 @@ GReturnCode initShaderPrograms()
       if(!shaderProgram->isValid())
       {
         success = GLW_FAIL;
-        LERROR(TRG, "BASIC_PROGRAM is not valid",
-               __FILE__, __LINE__, __CLASSNAME__, __func__);
+        LERROR("BASIC_PROGRAM is not valid");
       }
       else
       {
@@ -367,15 +410,13 @@ GReturnCode initShaderPrograms()
     else
     {
       success = GLW_FAIL;
-      LERROR(TRG, "BASIC_PROGRAM is NULL",
-             __FILE__, __LINE__, __CLASSNAME__, __func__);
+      LERROR("BASIC_PROGRAM is NULL");
     }
   }
   else
   {
     success = GLW_FAIL;
-    LERROR(TRG, "Failed to add BASIC_PROGRAM",
-           __FILE__, __LINE__, __CLASSNAME__, __func__);
+    LERROR("Failed to add BASIC_PROGRAM");
   }
 
   context.initShaderProgram(content->getModelMat(),
@@ -385,32 +426,18 @@ GReturnCode initShaderPrograms()
   return success;
 }
 
-void onButtonPress()
-{
-  LINFO(TRG, "This is a test", __CLASSNAME__, __func__);
-
-  context.printComponentTree(0, "");
-
-  context.validate();
-}
-
-void onToggledOn()
-{
-  LINFO(TRG, "Toggled On", __CLASSNAME__, __func__);
-}
-
 GReturnCode initVBOs()
 {
   GReturnCode success = GLW_SUCCESS;
 
-  LINFO(TRG, "Initialising VBOs...", __CLASSNAME__, __func__);
+  LINFO("Initialising VBOs...");
 
   // Create array containers
   GArrayVertex o;
   GArrayVec3 v, c, n, t;
   GArrayVec2 uv;
 
-  LINFO(TRG, "Generating Sphere...", __CLASSNAME__, __func__);
+  LINFO("Generating Sphere...");
 
   // Generate an array of vec3s for a sphere
   GPrimativeFactory::sphere(v, 12, 12);
@@ -448,8 +475,17 @@ GReturnCode initVBOs()
   fpsLabel = glw::gui::createLabel("fps", glm::vec2(), 20, glw::BLACK_A);
   pane->addComponent(fpsLabel);
 
-  gameGrid = Grid();
-  pane->addComponent(new GridComponent(glm::vec2(), glm::vec2(500), &gameGrid));
+//  mapGrid = Grid(10,10);
+//  map = new GridComponent(glm::vec2(), glm::vec2(500), &mapGrid);
+//  map->setPos((windowSize - map->getSize()) / 2.0f);
+//  map->validate();
+//  pane->addComponent(map);
+
+  shop = new ShopComponent(glm::vec2(), glm::vec2(300, 100));
+  shop->setPos(glm::vec2((windowSize.x - shop->getSize().x)/2.0f, windowSize.y - shop->getSize().y));
+  shop->validate();
+  pane->addComponent(shop);
+
 
   // Initialise the context
   context.init();
@@ -503,6 +539,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
       // Create a dialog for exit
       GDialog * dialog = createDialog(context, pane, "Are you sure you want to exit?");
       dialog->addConfirmCallback(ACTION(*content, &GContent::exit));
+      dialog->makeUnique("EXIT_DIALOG");
       break;
     }
   }
@@ -512,7 +549,7 @@ int main()
 {
   LSTARTLOGGER("../logs/GLW");
 
-  LINFO(TRG, "Program started.", __CLASSNAME__, __func__);
+  LINFO("Program started.");
 
   // Get instance pointer
   content = GContent::getInstancePtr();
@@ -524,7 +561,7 @@ int main()
   // Set the callbacks for the engine, and run
   content->run(loop, init, key_callback, mouse_button_callback);
 
-  LINFO(TRG, "Program exit.", __CLASSNAME__, __func__);
+  LINFO("Program exit.");
 
   LENDLOGGER();
 
