@@ -29,6 +29,7 @@ using glw::engine::buffers::GArrayVertex;
 using glw::engine::buffers::GArrayVec3;
 using glw::engine::buffers::GArrayVBO;
 
+using glw::gui::GShape;
 using glw::gui::GContext;
 using glw::gui::GButton;
 using glw::gui::GWindow;
@@ -45,27 +46,340 @@ using glw::gui::GPane;
 using glw::gui::GClickable;
 using glw::gui::GContextShaderHandle_T;
 using glw::gui::GComponent;
+using glw::gui::GGroup;
+using glw::gui::GContainer;
 using glw::meta::GLinker;
 
-using TD::Credit;
-using TD::Life;
-using TD::Tick;
-using TD::Game;
-using TD::Grid;
-using TD::Map;
-using TD::Tower;
-using TD::Path;
-using TD::Mob;
-using TD::Wave;
+//using TD::Credit;
+//using TD::Life;
+//using TD::Tick;
+//using TD::Game;
+//using TD::Grid;
+//using TD::Map;
+//using TD::Tower;
+//using TD::Path;
+//using TD::Mob;
+//using TD::Wave;
 
-class GridComponent;
-class ShopComponent;
 
 namespace
 {
   const char* TRG = "MAIN";
   const char* __CLASSNAME__ = "main";
+}
 
+#define TOWER_1_RPS 60
+#define TOWER_SIZE glm::vec2(50)
+#define TOWER_IMAGEFILE "../textures/tower.png"
+
+
+class Tower : public GImageView
+{
+public:
+
+  Tower()
+    : GImageView(glm::vec2(), TOWER_SIZE, TOWER_IMAGEFILE),
+      m_damage(1),
+      m_baseCost(100),
+      m_rpm(TOWER_1_RPS)
+  {}
+
+  Tower(glm::vec2 pos, const char * imagefile, int towerId)
+    : GImageView(pos, TOWER_SIZE, imagefile),
+      m_damage(1),
+      m_baseCost(100),
+      m_rpm(TOWER_1_RPS),
+      m_towerId(towerId)
+  {}
+
+  Tower(glm::vec2 pos, glm::vec2 size, const char * imagefile, int towerId)
+    : GImageView(pos, size, imagefile),
+      m_damage(1),
+      m_baseCost(100),
+      m_rpm(TOWER_1_RPS),
+      m_towerId(towerId)
+  {}
+
+  int getDamage()
+  {
+    return m_damage;
+  }
+
+  int getCost()
+  {
+    return m_baseCost;
+  }
+
+  int getRPM()
+  {
+    return m_rpm;
+  }
+
+  int getTowerId()
+  {
+    return m_towerId;
+  }
+
+  TRIGGERS_DERIVED(
+      TOWER, GIMAGEVIEW,
+      DEFINE_TRIGGER_NONE):
+
+    private:
+
+    int m_damage;
+  int m_baseCost;
+  int m_rpm;
+  int m_towerId;
+};
+
+#define NULL_SHOP_ITEM -1
+
+class TowerContainer : public GContainer, public GLinker
+{
+public:
+
+  TowerContainer()
+    : GContainer()
+  {
+    m_selectedItemImage = GImageView(glm::vec2(), TOWER_SIZE, "../textures/selected.png");
+    addComponent(&m_itemsPane);
+    addComponent(&m_selectedItemImage);
+  }
+
+  virtual bool checkMouseEvents(int button, int action)
+  {
+    bool eventHasHappened = GContainer::checkMouseEvents(button, action);
+
+    if (eventHasHappened)
+    {
+      onPressed();
+      onTowerSelected();
+    }
+
+    return eventHasHappened;
+  }
+
+  virtual void update()
+  {
+    if (!hasFocusedChild())
+    {
+      m_selectedItemImage.setVisible(false);
+    }
+  }
+
+  void addTower(Tower* tower)
+  {
+    m_itemsPane.addComponent(tower);
+  }
+
+  bool checkPlacedTowerBounds(Tower* towerToBePlaced)
+  {
+    bool canBePlaced = true;
+
+    for (IGComponent* component : m_itemsPane.getGroupComponents())
+    {
+      if (DCAST_COMPONENT(component, Tower, tower))
+      {
+        if (tower->isInside(towerToBePlaced))
+        {
+          canBePlaced = false;
+        }
+      }
+    }
+
+    return canBePlaced;
+  }
+
+  void setSelectedTowerSize(glm::vec2 size)
+  {
+    m_selectedItemImage.setSize(size);
+  }
+
+  Tower* getSelectedTower()
+  {
+    return m_selectedTower;
+  }
+
+  TRIGGERS_BASE(
+      SHOP,
+      DEFINE_TRIGGER(onTowerSelected),
+      DEFINE_TRIGGER(onPressed),
+      DEFINE_TRIGGER(onUnfocus)):
+
+  trigger_func onTowerSelected()
+  {
+    for (IGComponent* component : m_itemsPane.getGroupComponents())
+    {
+      if (DCAST_COMPONENT(component, Tower, tower))
+      {
+        if (tower->isPressed())
+        {
+          m_selectedTower = tower;
+          break;
+        }
+      }
+    }
+
+    if (NULL != m_selectedTower)
+    {
+      m_selectedItemImage.setVisible(true);
+      m_selectedItemImage.setPos(m_selectedTower->getPos());
+      LINKER_CALL(onTowerSelected);
+    }
+  }
+
+  trigger_func onPressed()
+  {
+    if (isPressed())
+    {
+      LINKER_CALL(onPressed);
+    }
+  }
+
+  virtual trigger_func unfocusComponent()
+  {
+    LINKER_CALL(onUnfocus);
+  }
+
+protected:
+
+  Tower* m_selectedTower = NULL;
+
+  GPane m_itemsPane;
+  GImageView m_selectedItemImage;
+
+};
+
+class Shop : public TowerContainer
+{
+public:
+
+  Shop()
+    : TowerContainer()
+  {
+    Tower* tower1 = new Tower(glm::vec2(), "../textures/tower1.png", 0);
+    addTower(tower1);
+    Tower* tower2 = new Tower(glm::vec2(), "../textures/tower2.png", 1);
+    addTower(tower2);
+    Tower* tower3 = new Tower(glm::vec2(), "../textures/tower3.png", 2);
+    addTower(tower3);
+  }
+
+  virtual void validate()
+  {
+
+    for (int ix = 0; ix < m_itemsPane.getGroupComponents().size(); ++ix)
+    {
+      if(DCAST_COMPONENT(m_itemsPane.getGroupComponents()[ix], Tower, tower))
+      {
+        tower->setSize(TOWER_SIZE);
+        tower->setPos(glm::vec2(tower->getSize().x * ix, 0));
+      }
+    }
+
+    TowerContainer::validate();
+  }
+
+private:
+
+};
+
+class Map : public TowerContainer
+{
+public:
+
+  Map() : TowerContainer() {}
+
+  void placeTower(Tower* tower)
+  {
+    addTower(tower);
+    tower->init(getContext(), &m_itemsPane);
+  }
+
+private:
+
+};
+
+class Game : public GPane
+{
+public:
+
+  Game()
+    : GPane()
+  {
+    addComponent(&m_shop);
+    addComponent(&m_map);
+    addComponent(&m_hoverTower);
+    m_hoverTower.setEnabled(false);
+    m_hoverTower.setFocusable(false);
+    LINKER_NEW_LINK(&m_map, Map::T_onPressed, ACTION(*this, &Game::buyTower));
+  }
+
+  Game(glm::vec2 pos, glm::vec2 size)
+    : GPane(pos, size)
+  {
+    addComponent(&m_shop);
+    addComponent(&m_map);
+    addComponent(&m_hoverTower);
+    m_hoverTower.setEnabled(false);
+    m_hoverTower.setFocusable(false);
+    LINKER_NEW_LINK(&m_map, Map::T_onPressed, ACTION(*this, &Game::buyTower));
+  }
+
+  virtual void validate()
+  {
+    GPane::validate();
+
+    glm::vec2 windowSize;
+    getContext()->getContent()->getWindowSize(windowSize);
+
+    glm::vec2 itemSize = TOWER_SIZE;
+
+    m_shop.setSize(glm::vec2(windowSize.x, itemSize.y));
+    m_shop.setPos(glm::vec2(0, windowSize.y - m_shop.getSize().y));
+
+    m_map.setSize(glm::vec2(windowSize.x, windowSize.y - itemSize.y));
+    m_map.setPos(glm::vec2());
+  }
+
+  virtual void update()
+  {
+    if (m_map.isHovering())
+    {
+      if (NULL != m_shop.getSelectedTower())
+      {
+        m_hoverTower.setPos(getRelativeMousePos());
+        m_hoverTower.validate();
+      }
+    }
+  }
+
+  void setMap(Map& map)
+  {
+    m_map = map;
+    LINKER_NEW_LINK(&m_map, Map::T_onPressed, ACTION(*this, &Game::buyTower));
+  }
+
+  void buyTower()
+  {
+    Tower* selectedTower = m_shop.getSelectedTower();
+    Tower* tower = new Tower(getRelativeMousePos(), "../textures/tower.png", -1);
+    if (m_map.checkPlacedTowerBounds(tower))
+    {
+      m_map.placeTower(tower);
+    }
+    validate();
+  }
+
+private:
+  Map m_map;
+  Shop m_shop;
+
+  Tower m_hoverTower;
+};
+
+namespace
+{
   GContent* content;
   GShaderProgramManager shaderProgramManager;
   GShaderProgramId BASIC_PROGRAM;
@@ -75,7 +389,7 @@ namespace
 
   GArrayVBO guiVBOs;
 
-  GCamera camera(glm::vec3(0, 0, 5), glm::vec3(), glm::vec3(0,0,-1), glm::vec3(0, 1, 0));
+  GCamera camera(glm::vec3(3, 0, 5), glm::vec3(), glm::vec3(0,0,-1), glm::vec3(0, 1, 0));
 
   GContext context;
 
@@ -83,242 +397,11 @@ namespace
 
   GPane* pane;
 
-  Grid mapGrid;
-  Grid shopGrid;
+  Map map;
 
-  GridComponent* map;
-  ShopComponent* shop;
+  Game game;
 }
 
-
-#define NULL_SELECTED_INDEX -1
-
-struct TableCell
-{
-  int x, y;
-};
-
-class GridComponent : public GClickable
-{
-public:
-
-  enum CellType
-  {
-    CT_SELECTED,
-    CT_EMPTY,
-    CT_TOWER,
-    CT_COUNT
-  };
-
-  GridComponent()
-    : m_grid(NULL),
-      m_selectedCell({NULL_SELECTED_INDEX, NULL_SELECTED_INDEX}),
-      m_uniqueImages()
-  {
-    initImageGrid(DEFAULT_GRIDSIZE, DEFAULT_GRIDSIZE);
-  }
-
-  GridComponent(glm::vec2 pos, glm::vec2 size, Grid* grid = NULL)
-    : GClickable(pos, size),
-      m_grid (grid),
-      m_selectedCell({NULL_SELECTED_INDEX, NULL_SELECTED_INDEX}),
-      m_uniqueImages()
-  {
-    if (NULL != grid)
-    {
-      initImageGrid(grid->getWidth(), grid->getHeight());
-    }
-  }
-
-  virtual void draw(glm::mat4 parentMatrix, glw::engine::glsl::GShaderHandle_T shaderHandle, glw::gui::GContextShaderHandle_T contextHandle)
-  {
-    if (NULL != m_grid)
-    {
-      for (int ix = 0; ix < m_grid->getWidth(); ++ix)
-      {
-        for (int iy = 0; iy < m_grid ->getHeight(); ++iy)
-        {
-          CellType ct = CT_EMPTY;
-          if (NULL != m_grid->getTower(ix,iy))
-          {
-            ct = CT_TOWER;
-          }
-          GImageView& image = m_uniqueImages[ct];
-          image.setPos(glm::vec2(image.getSize().x * ix,
-                                 image.getSize().y * iy));
-          image.validate();
-          image.draw(parentMatrix * getRelativeModelMatrix(), shaderHandle, contextHandle);
-        }
-      }
-      if (m_grid->isWithin(m_selectedCell.x, m_selectedCell.y))
-      {
-        GImageView& image = m_uniqueImages[CT_SELECTED];
-        image.setPos(glm::vec2(image.getSize().x * m_selectedCell.x,
-                               image.getSize().y * m_selectedCell.y));
-        image.validate();
-        image.draw(parentMatrix * getRelativeModelMatrix(), shaderHandle, contextHandle);
-      }
-    }
-  }
-
-  virtual bool checkKeyEvents(int key, int action)
-  {
-    return false;
-  }
-
-  virtual bool checkMouseEvents(int button, int action)
-  {
-    bool eventHasHappened = false;
-
-    eventHasHappened |= GClickable::checkMouseEvents(button, action);
-
-    onPressed();
-
-    return eventHasHappened;
-  }
-
-  virtual void init(glw::gui::GContext *context, IGComponent *parent)
-  {
-    setContext(context);
-    setParent(parent);
-    setId("gridcomponent");
-    inheritColorStyle();
-
-    loadImages();
-    initImages(context, parent);
-
-  }
-
-  virtual void validate()
-  {
-
-  }
-
-  virtual void update()
-  {
-
-  }
-
-  void onPressed()
-  {
-    if (NULL != m_grid)
-    {
-      if (this->isPressed())
-      {
-        glm::vec2 pos = this->getRelativeMousePos();
-
-        float cellWidth = this->getSize().x / m_grid->getWidth();
-        float cellHeight = this->getSize().y / m_grid->getHeight();
-
-        int x = pos.x / cellWidth;
-        int y = pos.y / cellHeight;
-
-        m_selectedCell = {x, y};
-      }
-    }
-  }
-
-
-protected:
-  Grid* m_grid;
-
-private:
-  TableCell m_selectedCell;
-
-  std::map<CellType, GImageView> m_uniqueImages;
-
-  typedef CellType* CellRow;
-  typedef CellRow* CellGrid;
-  CellGrid m_cellGrid;
-
-  void initImageGrid(int width, int height)
-  {
-    m_cellGrid = new CellRow[width];
-    for (int i = 0; i < width; ++i)
-    {
-      m_cellGrid[i] = new CellType[height];
-    }
-
-    for (int i = 0; i < width; ++i)
-    {
-      for (int j = 0; j < height; ++j)
-      {
-        m_cellGrid[i][j] = CT_EMPTY;
-      }
-    }
-  }
-
-  void loadImages()
-  {
-    if (NULL != m_grid)
-    {
-      float cellWidth = this->getSize().x / m_grid->getWidth();
-      float cellHeight = this->getSize().y / m_grid->getHeight();
-      m_uniqueImages[CT_EMPTY] = GImageView(glm::vec2(),
-                                            glm::vec2(cellWidth,
-                                                      cellHeight),
-                                            "../textures/empty.png");
-      m_uniqueImages[CT_TOWER] = GImageView(glm::vec2(),
-                                            glm::vec2(cellWidth,
-                                                      cellHeight),
-                                            "../textures/tower.png");
-      m_uniqueImages[CT_SELECTED] = GImageView(glm::vec2(),
-                                            glm::vec2(cellWidth,
-                                                      cellHeight),
-                                            "../textures/selected.png");
-    }
-  }
-  void initImages(glw::gui::GContext *context, IGComponent *parent)
-  {
-    std::map<CellType, GImageView>::iterator itor = m_uniqueImages.begin();
-
-    while(itor != m_uniqueImages.end())
-    {
-      itor->second.init(context, parent);
-      ++itor;
-    }
-  }
-};
-
-class ShopComponent : public GridComponent
-{
-public:
-  ShopComponent()
-  {}
-
-  ShopComponent(glm::vec2 pos, glm::vec2 size)
-    : GridComponent(pos, size, new Grid(GridComponent::CT_COUNT, 1))
-  {
-    m_grid->placeTower(0, 0, new Tower());
-  }
-
-  virtual void init(glw::gui::GContext *context, IGComponent *parent)
-  {
-    GridComponent::init(context, parent);
-  }
-  virtual void draw(glm::mat4 parentMatrix, glw::engine::glsl::GShaderHandle_T shaderHandle, glw::gui::GContextShaderHandle_T contextHandle)
-  {
-    GridComponent::draw(parentMatrix, shaderHandle, contextHandle);
-  }
-  virtual bool checkKeyEvents(int key, int action)
-  {
-    return GridComponent::checkKeyEvents(key, action);
-  }
-  virtual bool checkMouseEvents(int button, int action)
-  {
-    return GridComponent::checkMouseEvents(button, action);
-  }
-  virtual void validate()
-  {
-    GridComponent::validate();
-  }
-  virtual void update()
-  {
-    GridComponent::update();
-  }
-private:
-
-};
 
 void handleInput()
 {
@@ -450,14 +533,14 @@ GReturnCode initVBOs()
 
   // Create a new VBO with our new vertex array
   vbo = GVertexBufferObject(
-          o,                      // Supply the vertex array
-          glm::vec3(),            // World position
-          glm::vec3(0, 1, 0),     // Rotation axis
-          glm::radians(0.0f),     // Rotation angle
-          glm::vec3(1, 0, 0),     // Pre-rotation axis
-          glm::radians(90.0f),    // Pre-rotation angle
-          glm::vec3(1),
-          "../textures/mars.jpg");          // Scale vector
+        o,                      // Supply the vertex array
+        glm::vec3(),            // World position
+        glm::vec3(0, 1, 0),     // Rotation axis
+        glm::radians(0.0f),     // Rotation angle
+        glm::vec3(1, 0, 0),     // Pre-rotation axis
+        glm::radians(90.0f),    // Pre-rotation angle
+        glm::vec3(1),
+        "../textures/mars.jpg");          // Scale vector
 
   // Get the content window size
   glm::vec2 windowSize;
@@ -475,17 +558,9 @@ GReturnCode initVBOs()
   fpsLabel = glw::gui::createLabel("fps", glm::vec2(), 20, glw::BLACK_A);
   pane->addComponent(fpsLabel);
 
-//  mapGrid = Grid(10,10);
-//  map = new GridComponent(glm::vec2(), glm::vec2(500), &mapGrid);
-//  map->setPos((windowSize - map->getSize()) / 2.0f);
-//  map->validate();
-//  pane->addComponent(map);
-
-  shop = new ShopComponent(glm::vec2(), glm::vec2(300, 100));
-  shop->setPos(glm::vec2((windowSize.x - shop->getSize().x)/2.0f, windowSize.y - shop->getSize().y));
-  shop->validate();
-  pane->addComponent(shop);
-
+  game.setSize(windowSize);
+//  game.setMap(map);
+  pane->addComponent(&game);
 
   // Initialise the context
   context.init();
@@ -520,9 +595,9 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
   {
     switch (button)
     {
-    case GLFW_MOUSE_BUTTON_RIGHT:
+      case GLFW_MOUSE_BUTTON_RIGHT:
 
-      break;
+        break;
     }
   }
 }
@@ -535,12 +610,19 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
   {
     switch (key)
     {
-    case GLFW_KEY_ESCAPE:
-      // Create a dialog for exit
-      GDialog * dialog = createDialog(context, pane, "Are you sure you want to exit?");
-      dialog->addConfirmCallback(ACTION(*content, &GContent::exit));
-      dialog->makeUnique("EXIT_DIALOG");
-      break;
+      case GLFW_KEY_W:
+      {
+        context.printComponentTree(0, "");
+        break;
+      }
+      case GLFW_KEY_ESCAPE:
+      {
+        // Create a dialog for exit
+        GDialog * dialog = createDialog(context, pane, "Are you sure you want to exit?");
+        dialog->addConfirmCallback(ACTION(*content, &GContent::exit));
+        dialog->makeUnique("EXIT_DIALOG");
+        break;
+      }
     }
   }
 }

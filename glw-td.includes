@@ -14,3 +14,17 @@ build
 ../glw/inc
 textures
 inc
+../../../Downloads/glfw-3.2.1/deps/KHR
+../../../Downloads/glfw-3.2.1/deps/vulkan
+../../../Downloads/glfw-3.2.1/CMakeFiles
+../../../Downloads/glfw-3.2.1/CMakeFiles/3.10.2/CompilerIdC
+../../../Downloads/glfw-3.2.1/tests
+../../../Downloads/glfw-3.2.1/include/GLFW
+../../../Downloads/glfw-3.2.1/src
+../../../Downloads/glfw-3.2.1/deps/glad
+../../../Downloads/glfw-3.2.1/deps
+../../../Downloads/glfw-3.2.1/deps/mingw
+../../../Downloads/glfw-3.2.1/examples
+../glw/build/CMakeFiles/3.10.2/CompilerIdCXX
+../glw/build/CMakeFiles/3.10.2/CompilerIdC
+../glw/build/CMakeFiles
